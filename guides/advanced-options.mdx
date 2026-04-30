@@ -1,0 +1,186 @@
+---
+title: "Advanced parsing options in fast_float"
+description: "Use from_chars_advanced with parse_options to customize decimal separators, enable JSON-compliant parsing, and support Fortran-style exponents."
+---
+
+`fast_float::from_chars_advanced` extends the standard interface with a `parse_options` argument that controls decimal separator characters, number format constraints, and exponent notation styles. It covers use cases such as locale-aware parsing, strict JSON compliance, and Fortran scientific notation.
+
+<Note>
+The standard `fast_float::from_chars` is always locale-independent: the decimal separator is the period (`.`) and a leading `+` sign is rejected. Use `from_chars_advanced` when you need to deviate from these defaults.
+</Note>
+
+## `from_chars_advanced` and `parse_options`
+
+```cpp
+#include "fast_float/fast_float.h"
+
+fast_float::from_chars_result
+fast_float::from_chars_advanced(char const *first, char const *last,
+                                T &value,
+                                fast_float::parse_options options);
+```
+
+`parse_options` is a struct that bundles format flags with an optional custom decimal separator:
+
+```cpp
+struct parse_options_t<UC> {
+  chars_format format;     // which number formats are accepted
+  UC decimal_point;        // character used as decimal separator (default '.')
+  int base;                // integer base (default 10)
+};
+
+using parse_options = parse_options_t<char>;
+```
+
+Construct it with an initializer list — `format` first, then the decimal character if needed:
+
+```cpp
+fast_float::parse_options options{fast_float::chars_format::general, ','};
+```
+
+## Format variants
+
+<Tabs>
+  <Tab title="Custom decimal separator">
+    Replace the default period separator with any character, such as a comma for
+    European locale formats:
+
+    ```cpp
+    #include "fast_float/fast_float.h"
+    #include <iostream>
+
+    int main() {
+      std::string input = "3,1416 xyz ";
+      double result;
+      fast_float::parse_options options{fast_float::chars_format::general, ','};
+      auto answer = fast_float::from_chars_advanced(
+          input.data(), input.data() + input.size(), result, options);
+      if (answer.ec != std::errc()) {
+        std::cerr << "parsing failure\n";
+        return EXIT_FAILURE;
+      }
+      std::cout << "parsed the number " << result << std::endl;
+      // result == 3.1416
+      return EXIT_SUCCESS;
+    }
+    ```
+  </Tab>
+  <Tab title="JSON (RFC 8259)">
+    `chars_format::json` enforces the number grammar defined in
+    [RFC 8259](https://datatracker.ietf.org/doc/html/rfc8259#section-6).
+    It rejects:
+
+    - A leading `+` sign (e.g., `+.1`)
+    - A bare decimal without a leading integer digit (e.g., `.1`)
+    - Leading zeros in the integer part (e.g., `00.5`)
+    - `inf` and `nan`
+
+    ```cpp
+    #include "fast_float/fast_float.h"
+    #include <iostream>
+
+    int main() {
+      std::string input = "+.1"; // not valid JSON
+      double result;
+      fast_float::parse_options options{fast_float::chars_format::json};
+      auto answer = fast_float::from_chars_advanced(
+          input.data(), input.data() + input.size(), result, options);
+      if (answer.ec == std::errc()) {
+        std::cerr << "should have failed\n";
+        return EXIT_FAILURE;
+      }
+      // correctly rejected
+      return EXIT_SUCCESS;
+    }
+    ```
+
+    `inf` is also rejected under strict JSON mode:
+
+    ```cpp
+    std::string input = "inf"; // not valid in JSON
+    fast_float::parse_options options{fast_float::chars_format::json};
+    auto answer = fast_float::from_chars_advanced(
+        input.data(), input.data() + input.size(), result, options);
+    // answer.ec != std::errc()
+    ```
+  </Tab>
+  <Tab title="json_or_infnan">
+    `chars_format::json_or_infnan` is a non-standard extension of JSON mode that
+    additionally accepts `inf` and `nan`:
+
+    ```cpp
+    #include "fast_float/fast_float.h"
+    #include <iostream>
+    #include <cmath>
+
+    int main() {
+      std::string input = "inf"; // not valid in JSON but allowed here
+      double result;
+      fast_float::parse_options options{fast_float::chars_format::json_or_infnan};
+      auto answer = fast_float::from_chars_advanced(
+          input.data(), input.data() + input.size(), result, options);
+      if (answer.ec != std::errc() || !std::isinf(result)) {
+        std::cerr << "should have parsed infinity\n";
+        return EXIT_FAILURE;
+      }
+      return EXIT_SUCCESS;
+    }
+    ```
+
+    All other JSON restrictions (no leading `+`, no bare decimal, no leading
+    zeros) still apply.
+  </Tab>
+  <Tab title="Fortran">
+    `chars_format::fortran` recognizes Fortran-style exponent notation where `d`
+    (or `D`) acts as the exponent separator instead of `e`:
+
+    ```cpp
+    #include "fast_float/fast_float.h"
+    #include <iostream>
+
+    int main() {
+      std::string input = "1d+4"; // Fortran notation for 1 × 10^4
+      double result;
+      fast_float::parse_options options{fast_float::chars_format::fortran};
+      auto answer = fast_float::from_chars_advanced(
+          input.data(), input.data() + input.size(), result, options);
+      if (answer.ec != std::errc() || result != 10000) {
+        std::cerr << "parsing failure\n";
+        return EXIT_FAILURE;
+      }
+      std::cout << "parsed the number " << result << std::endl;
+      // result == 10000
+      return EXIT_SUCCESS;
+    }
+    ```
+
+    Fortran mode also accepts forms without an explicit exponent letter, such as
+    `1+4` (equivalent to `1e+4`), and combined with
+    `chars_format::allow_leading_plus` it accepts `+1+4` as well.
+  </Tab>
+</Tabs>
+
+## `allow_leading_plus` and `skip_white_space`
+
+These flags are part of `chars_format` and can be combined with any base format using bitwise OR:
+
+```cpp
+// Accept leading '+' in addition to the standard general format
+auto fmt = fast_float::chars_format::general
+         | fast_float::chars_format::allow_leading_plus;
+
+fast_float::parse_options options{fmt};
+auto answer = fast_float::from_chars_advanced(
+    input.data(), input.data() + input.size(), result, options);
+```
+
+```cpp
+// Skip leading whitespace before the number
+auto fmt = fast_float::chars_format::general
+         | fast_float::chars_format::skip_white_space;
+```
+
+<Note>
+When `chars_format::json` is active, `allow_leading_plus` is silently ignored.
+JSON mode always rejects a leading `+` regardless of other flags.
+</Note>

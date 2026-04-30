@@ -1,0 +1,124 @@
+---
+title: "Install fast_float via package managers"
+description: "fast_float is available in Conan Center, Homebrew, xmake, and Linux distribution repositories including Fedora. Packages are maintained independently."
+---
+
+fast_float is packaged in several popular C++ package managers and Linux distribution repositories, so you can add it to a project without manually managing the source tree. Choose the package manager that matches your existing toolchain.
+
+<Note>
+  Package manager repositories each maintain their own release cadence. Verify that the version available in your chosen registry matches the version you require before pinning a dependency.
+</Note>
+
+## Installation
+
+<Tabs>
+  <Tab title="Conan">
+    fast_float is available on [Conan Center](https://conan.io/center/recipes/fast_float). Add it to your `conanfile.txt`:
+
+    ```ini
+    [requires]
+    fast_float/8.2.5
+
+    [generators]
+    CMakeDeps
+    CMakeToolchain
+    ```
+
+    Then install dependencies and configure your project:
+
+    ```bash
+    conan install . --output-folder=build --build=missing
+    cmake -B build -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake
+    cmake --build build
+    ```
+
+    In your `CMakeLists.txt`, find and link the package:
+
+    ```cmake
+    find_package(fast_float REQUIRED)
+    target_link_libraries(myprogram PRIVATE fast_float::fast_float)
+    ```
+  </Tab>
+
+  <Tab title="Homebrew">
+    On macOS (and Linux with Homebrew), install fast_float with:
+
+    ```bash
+    brew install fast-float
+    ```
+
+    After installation, include the header in your source:
+
+    ```cpp
+    #include "fast_float/fast_float.h"
+    ```
+
+    Pass the Homebrew prefix to your compiler if it is not already on the default include path:
+
+    ```bash
+    c++ -I$(brew --prefix fast-float)/include main.cpp -o myprogram
+    ```
+  </Tab>
+
+  <Tab title="xmake">
+    fast_float is available in the [xmake repository](https://xmake.io). Add it as a dependency in your `xmake.lua`:
+
+    ```lua
+    add_requires("fast_float")
+
+    target("myprogram")
+        set_kind("binary")
+        add_files("src/*.cpp")
+        add_packages("fast_float")
+    ```
+
+    Then build:
+
+    ```bash
+    xmake
+    ```
+  </Tab>
+
+  <Tab title="Fedora / RPM Linux">
+    On Fedora and compatible RPM-based distributions, install the development package:
+
+    ```bash
+    sudo dnf install fast_float-devel
+    ```
+
+    The package installs the headers into the system include path, so no extra configuration is needed:
+
+    ```cpp
+    #include "fast_float/fast_float.h"
+    ```
+  </Tab>
+</Tabs>
+
+## Using the header after installation
+
+Regardless of how fast_float was installed, the entry point is always the same include directive:
+
+```cpp
+#include "fast_float/fast_float.h"
+```
+
+All functions live in the `fast_float` namespace:
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <iostream>
+#include <string>
+
+int main() {
+  std::string input = "3.1416";
+  double result;
+  auto answer = fast_float::from_chars(
+    input.data(), input.data() + input.size(), result);
+  if (answer.ec != std::errc()) {
+    std::cerr << "parsing failure\n";
+    return EXIT_FAILURE;
+  }
+  std::cout << "parsed the number " << result << std::endl;
+  return EXIT_SUCCESS;
+}
+```

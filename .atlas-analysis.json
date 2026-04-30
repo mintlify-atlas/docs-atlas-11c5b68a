@@ -1,0 +1,83 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "fast_float",
+  "projectDescription": "A header-only C++ library providing 4x–10x faster implementations of std::from_chars for floating-point and integer types with exact IEEE rounding.",
+  "theme": "luma",
+  "primaryColor": "#1a6fd4",
+  "lightColor": "#e8f0fe",
+  "darkColor": "#0d3b7a",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/floating-point-parsing",
+              "guides/integer-parsing",
+              "guides/advanced-options",
+              "guides/unicode-inputs",
+              "guides/constexpr"
+            ]
+          },
+          {
+            "group": "Integration",
+            "pages": [
+              "integration/cmake",
+              "integration/single-header",
+              "integration/package-managers"
+            ]
+          },
+          {
+            "group": "Performance",
+            "pages": [
+              "performance/benchmarks",
+              "performance/comparison"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "API",
+            "pages": [
+              "api/from-chars",
+              "api/from-chars-advanced",
+              "api/integer-times-pow10",
+              "api/types"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "4x to 10x faster than strtod and standard library from_chars",
+    "Header-only, zero allocations, no exceptions",
+    "Exact IEEE 754 rounding (round-to-even)",
+    "Supports float, double, fixed-width types (float16_t, bfloat16_t), and integers",
+    "C++11 compatible with optional C++20 constexpr support",
+    "UTF-8, UTF-16, and UTF-32 input support",
+    "Custom decimal separators, JSON, and Fortran format modes",
+    "Cross-platform: Linux, macOS, Windows, FreeBSD; little and big endian"
+  ],
+  "publicApiSurface": [
+    "fast_float::from_chars(first, last, value, fmt)",
+    "fast_float::from_chars_advanced(first, last, value, options)",
+    "fast_float::integer_times_pow10(mantissa, decimal_exponent)",
+    "fast_float::from_chars_result / from_chars_result_t<UC>",
+    "fast_float::parse_options / parse_options_t<UC>",
+    "fast_float::chars_format (general, fixed, scientific, json, json_or_infnan, fortran, hex, no_infnan, allow_leading_plus, skip_white_space)"
+  ]
+}

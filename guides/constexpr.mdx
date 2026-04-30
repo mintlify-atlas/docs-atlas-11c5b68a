@@ -1,0 +1,94 @@
+---
+title: "Compile-time number parsing with constexpr"
+description: "fast_float::from_chars supports constexpr evaluation in C++20, enabling number parsing at compile time with consteval and constexpr functions."
+---
+
+Starting in C++20, `fast_float::from_chars` is marked `FASTFLOAT_CONSTEXPR20`, which means the compiler can evaluate calls to it at compile time. This enables you to embed parsed numeric constants directly into compiled code with no runtime overhead.
+
+<Note>
+The library requires C++11 as its minimum standard for runtime use. Compile-time evaluation with `constexpr` and `consteval` requires C++20 or later.
+</Note>
+
+## `FASTFLOAT_CONSTEXPR20`
+
+The macro `FASTFLOAT_CONSTEXPR20` expands to `constexpr` when the compiler supports C++20 `std::is_constant_evaluated`. On older compilers it expands to nothing, so the same code compiles and runs correctly at runtime under C++11 through C++17.
+
+The declarations in `fast_float.h` look like:
+
+```cpp
+template <typename T, typename UC = char>
+FASTFLOAT_CONSTEXPR20 from_chars_result_t<UC>
+from_chars(UC const *first, UC const *last, T &value,
+           chars_format fmt = chars_format::general) noexcept;
+```
+
+## Compile-time parsing with `consteval`
+
+`consteval` (C++20) forces a function to be evaluated entirely at compile time. Use it to convert string literals into floating-point constants that the compiler folds into the program binary:
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <string_view>
+
+// consteval forces compile-time evaluation of the function in C++20.
+consteval double parse(std::string_view input) {
+  double result;
+  auto answer = fast_float::from_chars(
+      input.data(), input.data() + input.size(), result);
+  if (answer.ec != std::errc()) { return -1.0; }
+  return result;
+}
+
+// This function compiles down to a function that merely returns 3.1415.
+constexpr double constexptest() {
+  return parse("3.1415 input");
+}
+```
+
+Because `consteval` functions are evaluated only at compile time, the string `"3.1415 input"` never appears in the output binary; only the double-precision value `3.1415` does.
+
+## `consteval` vs `constexpr`
+
+<CardGroup cols={2}>
+  <Card title="consteval">
+    Evaluation is **required** at compile time. If the compiler cannot evaluate
+    the call at compile time (e.g., the input is not a constant expression), it
+    is a compile error. Use `consteval` when you want a hard guarantee that no
+    runtime parsing occurs.
+  </Card>
+  <Card title="constexpr">
+    Evaluation **may** happen at compile time. If the call appears in a
+    constant-expression context (e.g., initializing a `constexpr` variable),
+    the compiler evaluates it at compile time. Otherwise the call runs at
+    runtime. Use `constexpr` when the same function needs to work in both
+    contexts.
+  </Card>
+</CardGroup>
+
+## Using the result as a `constexpr` variable
+
+You can capture the compile-time result in a `constexpr` variable:
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <string_view>
+
+consteval double parse(std::string_view input) {
+  double result;
+  auto answer = fast_float::from_chars(
+      input.data(), input.data() + input.size(), result);
+  if (answer.ec != std::errc()) { return -1.0; }
+  return result;
+}
+
+// Evaluated entirely at compile time; no from_chars call at runtime.
+constexpr double pi = parse("3.14159265358979");
+constexpr double avogadro = parse("6.02214076e23");
+```
+
+## Limitations
+
+- Compile-time evaluation requires a C++20-capable compiler (GCC 10+, Clang 10+, MSVC 19.28+).
+- On compilers that do not support `std::is_constant_evaluated`, `FASTFLOAT_CONSTEXPR20` expands to nothing and compile-time evaluation is not available, but the library continues to function at runtime.
+- Only `float` and `double` (and, where available, the C++23 fixed-width types) support compile-time evaluation through this mechanism. Integer parsing via `from_chars` is also marked `FASTFLOAT_CONSTEXPR20` and follows the same rules.
+- `consteval` functions cannot be called at runtime. If you need a function usable in both contexts, mark it `constexpr` instead.

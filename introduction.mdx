@@ -1,0 +1,82 @@
+---
+title: "fast_float: header-only C++ number parsing library"
+description: "fast_float provides exact, locale-independent parsing of floating-point and integer numbers with IEEE 754 rounding, up to 10x faster than strtod."
+---
+
+fast_float is a header-only C++ library that converts ASCII strings to `float`, `double`, and integer types using the same interface as C++17's `std::from_chars` — but much faster, and with only a C++11 compiler required.
+
+## What problem does it solve?
+
+Standard library number-parsing functions (`strtod`, `sscanf`, `std::stod`) are slow, locale-dependent, and inconsistent across platforms. `std::from_chars` (C++17) addresses locale independence and error handling, but many implementations are not as fast as they could be.
+
+fast_float solves all of this at once:
+
+- Parses floating-point and integer values at up to 1 GB/s on modern hardware.
+- Produces exactly-rounded results following IEEE 754, using round-to-even.
+- Is locale-independent by default: the decimal separator is always `.`.
+- Requires only C++11, while offering opt-in support for C++20 `constexpr` and C++23 fixed-width types.
+
+<Note>
+fast_float never allocates memory and never throws exceptions. It is a pure header-only library — add the `include/` directory to your compiler's include path and you are done.
+</Note>
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Parse your first number in three steps. Start here if you are new to fast_float.
+  </Card>
+  <Card title="Floating-point parsing" icon="wave-sine" href="/guides/floating-point-parsing">
+    Full reference for `from_chars` with `float` and `double`, including format flags, infinity, and NaN.
+  </Card>
+  <Card title="Integer parsing" icon="binary" href="/guides/integer-parsing">
+    Parse integers of any standard type in decimal, binary, hex, or any base from 2 to 36.
+  </Card>
+  <Card title="API reference" icon="code" href="/api/from-chars">
+    Complete API reference for `from_chars`, `from_chars_advanced`, and `integer_times_pow10`.
+  </Card>
+</CardGroup>
+
+## C++ standard compatibility
+
+The library itself requires only **C++11**. Additional capabilities unlock automatically as you use a newer standard:
+
+| Standard | What you get |
+|----------|-------------|
+| C++11    | Full floating-point and integer parsing |
+| C++17    | `from_chars_result` matches `std::from_chars_result` exactly |
+| C++20    | `constexpr` / compile-time parsing |
+| C++23    | Fixed-width types: `std::float32_t`, `std::float64_t`, `std::float16_t`, `std::bfloat16_t` |
+| C++26    | `bool` conversion on `from_chars_result` for concise error checks |
+
+## Platform support
+
+fast_float supports Visual Studio, macOS, Linux, and FreeBSD. It handles both big-endian and little-endian systems, and both 32-bit and 64-bit architectures.
+
+## Who uses fast_float?
+
+fast_float is used in production by a wide range of well-known projects:
+
+- **GCC 12+** — the standard library `from_chars` implementation
+- **Chromium** — the engine behind Google Chrome, Microsoft Edge, and Opera
+- **WebKit / Safari** — Apple's browser engine
+- **Redis** and **Valkey**
+- **MySQL**
+- **DuckDB**
+- **Apache Arrow** — where it doubled or tripled number-parsing throughput
+- **ClickHouse**
+
+The core algorithm is also part of the LLVM standard libraries.
+
+## Next steps
+
+If you are ready to start using fast_float, head to the installation guide to add it to your project.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Add fast_float via CMake, a single header, Conan, Homebrew, or xmake.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Write and run your first parsing program.
+  </Card>
+</CardGroup>

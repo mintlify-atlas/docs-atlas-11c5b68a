@@ -1,0 +1,82 @@
+---
+title: "Benchmark fast_float in your environment"
+description: "Run fast_float's built-in benchmarks with CMake to measure parsing throughput on your hardware. Requires C++17 and a Release build."
+---
+
+fast_float ships with a benchmark suite that measures floating-point parsing throughput against real-world data files. Running it on your own hardware gives you accurate numbers for your specific CPU and compiler.
+
+## Results on reference hardware
+
+The table below shows throughput numbers from a representative benchmark run parsing random floating-point numbers in the range `[0,1)` (volume: 2.09808 MB):
+
+| Parser            | Throughput (MB/s) | Throughput (Mfloat/s) |
+| ----------------- | ----------------: | --------------------: |
+| netlib            | 271.18            | 12.93                 |
+| doubleconversion  | 225.35            | 10.74                 |
+| strtod            | 190.94            | 9.10                  |
+| abseil            | 430.45            | 20.52                 |
+| **fastfloat**     | **1042.38**       | **49.68**             |
+
+fast_float can parse random floating-point numbers at a speed of 1 GB/s on some systems — frequently twice as fast as the best available competitor and many times faster than standard-library implementations.
+
+<Note>
+  The benchmark executable requires C++17. The fast_float library itself only requires C++11, so you can use the library without the benchmark tooling on older compilers.
+</Note>
+
+## Build and run the benchmarks
+
+<Steps>
+  <Step title="Configure the build with benchmarks enabled">
+    Pass `FASTFLOAT_BENCHMARKS=ON` to CMake. By default, the benchmark target is built in **Release** mode, so no extra flag is needed to get optimized numbers.
+
+    ```bash
+    cmake -B build -D FASTFLOAT_BENCHMARKS=ON
+    ```
+  </Step>
+
+  <Step title="Compile">
+    ```bash
+    cmake --build build
+    ```
+
+    CMake will also clone the `simple_fastfloat_benchmark` data repository and copy the benchmark data files (`canada.txt`, `mesh.txt`) into the build directory automatically.
+  </Step>
+
+  <Step title="Run the benchmark">
+    ```bash
+    ./build/benchmarks/realbenchmark
+    ```
+
+    The benchmark runs over the bundled data files and prints throughput in MB/s and Mfloat/s for each parser.
+  </Step>
+</Steps>
+
+## Running with hardware performance counters
+
+On Linux and macOS (including Apple Silicon), you can get additional per-instruction and per-cycle metrics by running with elevated privileges:
+
+```bash
+sudo ./build/benchmarks/realbenchmark
+```
+
+Without `sudo`, the benchmark falls back to wall-clock timing. On platforms other than Linux and macOS/aarch64, hardware counters are not used regardless of privilege level.
+
+## Benchmarking a custom file
+
+If you have a text file with one floating-point number per line, you can benchmark fast_float against your own data:
+
+```bash
+./build/benchmarks/realbenchmark myfile.txt
+```
+
+This is useful for measuring throughput on data that reflects your actual workload rather than the bundled synthetic datasets.
+
+## CMake option reference
+
+| Option                    | Default | Description                                              |
+| ------------------------- | ------- | -------------------------------------------------------- |
+| `FASTFLOAT_BENCHMARKS=ON` | OFF     | Enables building the `realbenchmark` executable and its dependencies. |
+
+<Note>
+  The benchmark build fetches the `counters` library (v2.2.0) and the `simple_fastfloat_benchmark` data repository via CMake's `FetchContent` and `ExternalProject`. An internet connection is required during the first configure step.
+</Note>

@@ -1,0 +1,122 @@
+---
+title: "Integrate fast_float with CMake"
+description: "Add fast_float to your CMake project using FetchContent, add_subdirectory, or CPM.cmake. The library exports the FastFloat::fast_float target."
+---
+
+fast_float is a header-only library with a CMake build system that exposes the `FastFloat::fast_float` interface target. Linking against it automatically adds the `include/` directory to your include path and requires C++11 as a compile feature. The three most common ways to consume fast_float in a CMake project are shown below.
+
+## Integration methods
+
+<Tabs>
+  <Tab title="FetchContent">
+    `FetchContent` downloads and configures fast_float at configure time. It requires CMake 3.11 or later (3.14 is recommended).
+
+    <Steps>
+      <Step title="Declare the dependency">
+        Add the following block to your `CMakeLists.txt` before any target that needs the library. Update `GIT_TAG` to pin a specific release.
+
+        ```cmake
+        include(FetchContent)
+
+        FetchContent_Declare(
+          fast_float
+          GIT_REPOSITORY https://github.com/fastfloat/fast_float.git
+          GIT_TAG        tags/v8.2.5
+          GIT_SHALLOW    TRUE
+        )
+        ```
+      </Step>
+
+      <Step title="Make the dependency available">
+        ```cmake
+        FetchContent_MakeAvailable(fast_float)
+        ```
+      </Step>
+
+      <Step title="Link your target">
+        ```cmake
+        target_link_libraries(myprogram PUBLIC fast_float)
+        ```
+
+        You can use either `fast_float` or the namespaced alias `FastFloat::fast_float`:
+
+        ```cmake
+        target_link_libraries(myprogram PUBLIC FastFloat::fast_float)
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="add_subdirectory">
+    If you vendor fast_float inside your repository (for example, as a Git submodule at `third_party/fast_float`), use `add_subdirectory` to include it. CMake 3.14 is required by fast_float's own `CMakeLists.txt`.
+
+    ```cmake
+    cmake_minimum_required(VERSION 3.14)
+    project(myproject)
+
+    add_subdirectory(third_party/fast_float)
+
+    add_executable(myprogram main.cpp)
+    target_link_libraries(myprogram PUBLIC fast_float)
+    ```
+
+    <Note>
+      You can also use the namespaced alias `FastFloat::fast_float` interchangeably with the plain `fast_float` target name. The alias is defined in fast_float's own `CMakeLists.txt` via `add_library(FastFloat::fast_float ALIAS fast_float)`.
+    </Note>
+  </Tab>
+
+  <Tab title="CPM.cmake">
+    [CPM.cmake](https://github.com/cpm-cmake/CPM.cmake) is a lightweight package manager built on top of `FetchContent`. After installing CPM into your project, add:
+
+    ```cmake
+    CPMAddPackage(
+      NAME fast_float
+      GITHUB_REPOSITORY "fastfloat/fast_float"
+      GIT_TAG v8.2.5
+    )
+
+    target_link_libraries(myprogram PUBLIC fast_float)
+    ```
+  </Tab>
+</Tabs>
+
+## What the target provides
+
+When you link against `fast_float` (or `FastFloat::fast_float`), CMake automatically:
+
+- Adds `include/` to your target's include path via `target_include_directories` with `INTERFACE` scope.
+- Requires `cxx_std_11` as a compile feature, so your compiler will use at least C++11.
+
+The relevant lines in fast_float's `CMakeLists.txt` are:
+
+```cmake
+add_library(fast_float INTERFACE)
+add_library(FastFloat::fast_float ALIAS fast_float)
+
+target_include_directories(
+  fast_float
+  INTERFACE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+target_compile_features(fast_float INTERFACE cxx_std_11)
+```
+
+## CMake options
+
+fast_float exposes the following CMake options that can be set with `-D` flags or via `cmake-gui`:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `FASTFLOAT_TEST` | `OFF` | Build and enable the test suite. |
+| `FASTFLOAT_BENCHMARKS` | `OFF` | Build benchmarks (requires C++17). |
+| `FASTFLOAT_SANITIZE` | `OFF` | Enable AddressSanitizer and UBSan. |
+| `FASTFLOAT_INSTALL` | `ON` | Install headers and CMake package files. |
+
+For example, to build with tests enabled:
+
+```bash
+cmake -B build -DFASTFLOAT_TEST=ON
+cmake --build build
+ctest --test-dir build
+```

@@ -1,0 +1,206 @@
+---
+title: "fast_float types and enumerations reference"
+description: "Reference for all fast_float public types: from_chars_result_t, parse_options_t, chars_format enum, and supported float and integer types."
+---
+
+This page documents every public type exposed by the `fast_float` namespace. All types are defined in `fast_float/float_common.h` and are available after including `fast_float/fast_float.h`.
+
+## `from_chars_result_t<UC>`
+
+The return type of `from_chars` and `from_chars_advanced`. Mirrors `std::from_chars_result` with an added `operator bool` from the C++26 proposal [P2497](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2023/p2497r0.html).
+
+```cpp
+template <typename UC> struct from_chars_result_t {
+    UC const *ptr;
+    std::errc ec;
+
+    constexpr explicit operator bool() const noexcept {
+        return ec == std::errc();
+    }
+};
+
+using from_chars_result = from_chars_result_t<char>;
+```
+
+<ResponseField name="ptr" type="UC const *">
+  On success, points one past the last character consumed by the parse. On failure (`ec != std::errc()`), equals `first` — no characters were consumed. When `ec == std::errc::result_out_of_range`, `ptr` still points past the recognized (but out-of-range) number.
+</ResponseField>
+
+<ResponseField name="ec" type="std::errc">
+  Error code. Possible values:
+
+  | Value | Meaning |
+  |---|---|
+  | `std::errc()` | Success — `value` holds the result. |
+  | `std::errc::invalid_argument` | No number token found at `first`. `value` is unmodified. |
+  | `std::errc::result_out_of_range` | Number recognized but overflows or underflows `T`. `value` is set to `±infinity` (overflow) or `±0` (underflow). |
+</ResponseField>
+
+<ResponseField name="operator bool()" type="explicit bool">
+  Returns `true` when `ec == std::errc()`. Enables the C++26-style `if (auto r = from_chars(...))` idiom even in C++11/17/20 codebases.
+</ResponseField>
+
+The `from_chars_result` alias (`using from_chars_result = from_chars_result_t<char>`) is provided for compatibility with `std::from_chars_result`.
+
+---
+
+## `parse_options_t<UC>`
+
+Options struct passed to `from_chars_advanced`. Controls the accepted format, decimal separator, and integer base.
+
+```cpp
+template <typename UC> struct parse_options_t {
+    constexpr explicit parse_options_t(
+        chars_format fmt = chars_format::general,
+        UC dot = UC('.'),
+        int b = 10)
+        : format(fmt), decimal_point(dot), base(b) {}
+
+    chars_format format;
+    UC decimal_point;
+    int base;
+};
+
+using parse_options = parse_options_t<char>;
+```
+
+<ResponseField name="format" type="chars_format" default="chars_format::general">
+  Bitmask selecting which number formats `from_chars_advanced` will accept. See [`chars_format`](#chars-format) below for all possible values.
+</ResponseField>
+
+<ResponseField name="decimal_point" type="UC" default="'.'">
+  Character used as the decimal separator. Change to `','` for locales that write `3,14` instead of `3.14`. Must be the same character type as `UC`.
+</ResponseField>
+
+<ResponseField name="base" type="int" default="10">
+  Numeric base for integer parsing. Valid range is 2–36. Ignored when `T` is a floating-point type.
+</ResponseField>
+
+The `parse_options` alias (`using parse_options = parse_options_t<char>`) is provided for convenience when working with `char` inputs.
+
+---
+
+## `chars_format`
+
+Scoped enumeration (underlying type `uint64_t`) used as a bitmask to control number format acceptance in `from_chars` and `from_chars_advanced`.
+
+```cpp
+enum class chars_format : uint64_t {
+    scientific         = 1 << 0,  // 1
+    fixed              = 1 << 2,  // 4
+    hex                = 1 << 3,  // 8
+    no_infnan          = 1 << 4,  // 16
+    json               = ...,     // composite: fixed | scientific | no_infnan | internal bit
+    json_or_infnan     = ...,     // composite: fixed | scientific | internal bit
+    fortran            = ...,     // composite: fixed | scientific | internal bit
+    general            = fixed | scientific,
+    allow_leading_plus = 1 << 7,  // 128
+    skip_white_space   = 1 << 8,  // 256
+};
+```
+
+<Note>
+  `basic_json_fmt` (`1 << 5`) and `basic_fortran_fmt` (`1 << 6`) are internal detail bits embedded in the composite values `json`, `json_or_infnan`, and `fortran`. They are not part of the public API and should not be referenced directly.
+</Note>
+
+### Enumerator reference
+
+| Enumerator | Bit value | Description |
+|---|---|---|
+| `scientific` | `1 << 0` (1) | Accept scientific notation: `1.5e3`, `1E-2`. |
+| `fixed` | `1 << 2` (4) | Accept fixed-point notation: `3.14`, `42`. |
+| `hex` | `1 << 3` (8) | Defined in the enum but **not implemented** for floating-point — fast_float only parses decimal strings. For integers, hex digits are handled via the `base` parameter instead. |
+| `no_infnan` | `1 << 4` (16) | Reject `inf`, `infinity`, and `nan` tokens. |
+| `json` | composite | Strict [RFC 8259](https://datatracker.ietf.org/doc/html/rfc8259#section-6) — accepts fixed and scientific, forbids `inf`/`nan`, leading `+`, and leading zeros on integer parts. |
+| `json_or_infnan` | composite | Like `json` but allows `inf` and `nan`. |
+| `fortran` | composite | Fixed and scientific notation, plus `d`/`D` as the exponent separator (Fortran convention). |
+| `general` | `fixed \| scientific` | Both fixed-point and scientific. This is the default. |
+| `allow_leading_plus` | `1 << 7` (128) | Accept a leading `+` sign before the number. |
+| `skip_white_space` | `1 << 8` (256) | Skip leading whitespace (ASCII space, tab, newline, etc.) before parsing. |
+
+`chars_format` supports the full set of bitwise operators (`~`, `&`, `|`, `^`, `&=`, `|=`, `^=`) so values can be combined freely:
+
+```cpp
+// Accept fixed and scientific, but not inf/nan, and allow leading +
+auto fmt = fast_float::chars_format::general
+         | fast_float::chars_format::no_infnan
+         | fast_float::chars_format::allow_leading_plus;
+```
+
+---
+
+## Supported floating-point types
+
+`from_chars`, `from_chars_advanced`, and `integer_times_pow10` accept any `T` that satisfies `is_supported_float_type<T>`.
+
+| Type | Standard | Notes |
+|---|---|---|
+| `float` | C++11 | 32-bit single-precision IEEE 754. Always available. |
+| `double` | C++11 | 64-bit double-precision IEEE 754. Always available. |
+| `std::float16_t` | C++23 (`<stdfloat>`) | 16-bit half-precision. Available when `__STDCPP_FLOAT16_T__` is defined. |
+| `std::bfloat16_t` | C++23 (`<stdfloat>`) | 16-bit brain-float. Available when `__STDCPP_BFLOAT16_T__` is defined. |
+| `std::float32_t` | C++23 (`<stdfloat>`) | Equivalent to `float`. Available when `__STDCPP_FLOAT32_T__` is defined. |
+| `std::float64_t` | C++23 (`<stdfloat>`) | Equivalent to `double`. Available when `__STDCPP_FLOAT64_T__` is defined. |
+
+<Note>
+  `long double` is **not** supported. Use `double` and cast if needed.
+</Note>
+
+---
+
+## Supported integer types
+
+The integer overload of `from_chars` and `from_chars_advanced` accepts any `T` that satisfies `is_supported_integer_type<T>`, which is `std::is_integral<T>`. This covers:
+
+<Expandable title="All supported integer types" defaultOpen={false}>
+
+**Signed types**
+
+| Type | Typical width |
+|---|---|
+| `char` | 8-bit |
+| `signed char` | 8-bit |
+| `short` | 16-bit |
+| `int` | 32-bit |
+| `long` | 32 or 64-bit |
+| `long long` | 64-bit |
+| `int8_t` | 8-bit |
+| `int16_t` | 16-bit |
+| `int32_t` | 32-bit |
+| `int64_t` | 64-bit |
+
+**Unsigned types**
+
+| Type | Typical width |
+|---|---|
+| `unsigned char` | 8-bit |
+| `unsigned short` | 16-bit |
+| `unsigned int` | 32-bit |
+| `unsigned long` | 32 or 64-bit |
+| `unsigned long long` | 64-bit |
+| `uint8_t` | 8-bit |
+| `uint16_t` | 16-bit |
+| `uint32_t` | 32-bit |
+| `uint64_t` | 64-bit |
+
+**Boolean**
+
+| Type | Notes |
+|---|---|
+| `bool` | Accepts `0` and `1` only. |
+
+</Expandable>
+
+---
+
+## Supported character types
+
+The `UC` template parameter in `from_chars`, `from_chars_advanced`, `from_chars_result_t`, and `parse_options_t` must satisfy `is_supported_char_type<UC>`:
+
+| Type | Encoding |
+|---|---|
+| `char` | ASCII / UTF-8 (default) |
+| `wchar_t` | Platform-native wide character |
+| `char16_t` | UTF-16 |
+| `char32_t` | UTF-32 |
+| `char8_t` | UTF-8 (C++20, when `__cpp_char8_t` is defined) |

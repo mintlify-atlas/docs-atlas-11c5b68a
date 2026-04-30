@@ -1,0 +1,213 @@
+---
+title: "from_chars — parse numbers from a char sequence"
+description: "fast_float::from_chars parses floating-point and integer values from [first, last) with locale-independent IEEE 754 rounding and no memory allocation."
+---
+
+`fast_float::from_chars` converts a character sequence into a numeric value with exact IEEE 754 rounding, no memory allocation, and no exceptions. It mirrors the C++17 `std::from_chars` API and works with floating-point types, all standard integer types, and wide/Unicode character types.
+
+## Signatures
+
+```cpp
+// Floating-point overload
+template <typename T, typename UC = char,
+          typename = FASTFLOAT_ENABLE_IF(is_supported_float_type<T>::value)>
+FASTFLOAT_CONSTEXPR20 from_chars_result_t<UC>
+from_chars(UC const *first, UC const *last, T &value,
+           chars_format fmt = chars_format::general) noexcept;
+
+// Integer overload
+template <typename T, typename UC = char,
+          typename = FASTFLOAT_ENABLE_IF(is_supported_integer_type<T>::value)>
+FASTFLOAT_CONSTEXPR20 from_chars_result_t<UC>
+from_chars(UC const *first, UC const *last, T &value, int base = 10) noexcept;
+```
+
+## Template parameters
+
+<ParamField path="T" type="typename" required>
+  The target numeric type. For the floating-point overload, `T` must satisfy `is_supported_float_type<T>` (`float`, `double`, `std::float16_t`, `std::bfloat16_t`, `std::float32_t`, `std::float64_t`). For the integer overload, `T` must satisfy `is_supported_integer_type<T>` (any integral type including `bool`).
+</ParamField>
+
+<ParamField path="UC" type="typename" default="char">
+  The character type. Supported values are `char`, `wchar_t`, `char16_t`, `char32_t`, and (when available) `char8_t`. Determines the type of `first`, `last`, and the `ptr` field of the result.
+</ParamField>
+
+## Parameters
+
+<ParamField path="first" type="UC const *" required>
+  Pointer to the first character of the input sequence. The function does not skip leading whitespace unless `chars_format::skip_white_space` is set.
+</ParamField>
+
+<ParamField path="last" type="UC const *" required>
+  One-past-the-end pointer for the input sequence. The parsed range is `[first, last)`.
+</ParamField>
+
+<ParamField path="value" type="T &" required>
+  Output reference that receives the parsed value. Modified only on a successful parse or when `std::errc::result_out_of_range` is returned (see below).
+</ParamField>
+
+<ParamField path="fmt" type="chars_format" default="chars_format::general">
+  *(Floating-point overload only.)* Bitmask controlling which number formats are accepted. Defaults to `chars_format::general`, which accepts both fixed-point and scientific notation. See the [`chars_format`](/api/types#chars-format) reference for all values.
+</ParamField>
+
+<ParamField path="base" type="int" default="10">
+  *(Integer overload only.)* Numeric base for parsing. Valid range is 2–36. Digit characters beyond `'9'` use `'a'`–`'z'` (case-insensitive).
+</ParamField>
+
+## Return value
+
+Returns a `from_chars_result_t<UC>` struct with two fields:
+
+<ResponseField name="ptr" type="UC const *">
+  On success, points one past the last character consumed. On failure, equals `first` (no characters were consumed).
+</ResponseField>
+
+<ResponseField name="ec" type="std::errc">
+  `std::errc()` (the default-constructed value, numerically zero) on success. `std::errc::invalid_argument` when no number could be matched. `std::errc::result_out_of_range` when the number was syntactically valid but outside the representable range of `T`.
+</ResponseField>
+
+## Behavior
+
+**On success** — `ptr` points past the parsed number and `value` holds the result. The parsed floating-point value is the nearest representable value using round-to-even (IEEE 754 default rounding).
+
+**On `invalid_argument`** — the input does not begin with a recognizable number token. `value` is left unmodified and `ptr == first`.
+
+**On `result_out_of_range`** — the number was recognized but unrepresentable:
+- Very large magnitudes (e.g., `1e9999`) set `value` to `±infinity`.
+- Very small magnitudes (e.g., `1e-9999`) set `value` to `±0`.
+- `ptr` still points past the consumed number.
+
+<Warning>
+  When `std::errc::result_out_of_range` is returned, `value` **is** modified. If you need the original value preserved on error, save a copy before calling `from_chars` and restore it when `ec == std::errc::result_out_of_range`.
+
+  ```cpp
+  double saved = value;
+  auto r = fast_float::from_chars(first, last, value);
+  if (r.ec == std::errc::result_out_of_range) { value = saved; }
+  ```
+</Warning>
+
+**Leading `+` sign** — forbidden by default (following C++17). Enable with `chars_format::allow_leading_plus`.
+
+**Leading whitespace** — not skipped by default. Enable with `chars_format::skip_white_space`.
+
+**`infinity` / `nan`** — accepted in the default `general` format. Suppressed with `chars_format::no_infnan` or implied by `chars_format::json`.
+
+## Guarantees
+
+- **`noexcept`** — never throws.
+- **No allocation** — no `new`, `malloc`, or any dynamic memory.
+- **`FASTFLOAT_CONSTEXPR20`** — usable in `constexpr`/`consteval` contexts when compiled as C++20 or later.
+
+## Examples
+
+### Basic floating-point parsing
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <iostream>
+#include <string>
+
+int main() {
+    std::string input = "3.1416 xyz";
+    double result;
+    auto answer = fast_float::from_chars(
+        input.data(), input.data() + input.size(), result);
+
+    if (answer.ec != std::errc()) {
+        std::cerr << "parsing failure\n";
+        return EXIT_FAILURE;
+    }
+    // result == 3.1416, answer.ptr points to ' '
+    std::cout << "parsed: " << result << '\n';
+    return EXIT_SUCCESS;
+}
+```
+
+### C++26-style bool conversion (P2497)
+
+`from_chars_result_t` implements `explicit operator bool() const noexcept`, which returns `true` when `ec == std::errc()`. This allows the idiomatic C++26 check:
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <iostream>
+#include <string>
+
+int main() {
+    std::string input = "3.1416 xyz";
+    double result;
+
+    if (auto answer = fast_float::from_chars(
+            input.data(), input.data() + input.size(), result)) {
+        std::cout << "parsed: " << result << '\n';
+        return EXIT_SUCCESS;
+    }
+    std::cerr << "failed to parse: " << input << '\n';
+    return EXIT_FAILURE;
+}
+```
+
+### Integer parsing in multiple bases
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <iostream>
+#include <string>
+
+int main() {
+    uint64_t value;
+
+    // Decimal
+    std::string dec = "22250738585072012";
+    fast_float::from_chars(dec.data(), dec.data() + dec.size(), value);
+    std::cout << value << '\n'; // 22250738585072012
+
+    // Binary
+    std::string bin = "1001111000011001110110111001001010110100111000110001100";
+    fast_float::from_chars(bin.data(), bin.data() + bin.size(), value, 2);
+    std::cout << value << '\n'; // 22250738585072012
+
+    // Hexadecimal
+    std::string hex = "4f0cedc95a718c";
+    fast_float::from_chars(hex.data(), hex.data() + hex.size(), value, 16);
+    std::cout << value << '\n'; // 22250738585072012
+
+    return EXIT_SUCCESS;
+}
+```
+
+### Parsing a comma-delimited list
+
+```cpp
+std::string input = "234532.3426362,7869234.9823,324562.645";
+double result;
+const char *p = input.data();
+const char *end = input.data() + input.size();
+
+auto answer = fast_float::from_chars(p, end, result);
+// result == 234532.3426362, answer.ptr points to ','
+p = answer.ptr + 1; // skip ','
+
+answer = fast_float::from_chars(p, end, result);
+// result == 7869234.9823
+p = answer.ptr + 1;
+
+answer = fast_float::from_chars(p, end, result);
+// result == 324562.645
+```
+
+### Compile-time evaluation (C++20)
+
+```cpp
+#include "fast_float/fast_float.h"
+
+consteval double parse(std::string_view input) {
+    double result;
+    auto answer = fast_float::from_chars(
+        input.data(), input.data() + input.size(), result);
+    if (answer.ec != std::errc()) { return -1.0; }
+    return result;
+}
+
+constexpr double pi = parse("3.14159265358979");
+```

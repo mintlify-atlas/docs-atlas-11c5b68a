@@ -1,0 +1,98 @@
+---
+title: "How fast_float compares to other parsers"
+description: "fast_float outperforms strtod, doubleconversion, netlib, and abseil by 2x–5x. It is used in GCC, Chromium, Redis, and other high-throughput systems."
+---
+
+fast_float is designed to be the fastest correct floating-point parser available for C++. Across every parser tested in the bundled benchmark suite, fast_float delivers the highest throughput — often by a factor of two to five — while producing correctly rounded results identical to those of the C++ standard library.
+
+## Throughput comparison
+
+The numbers below come from parsing random floating-point numbers in the range `[0,1)` on a single reference machine (volume: 2.09808 MB). Results vary by CPU, compiler, and data characteristics.
+
+| Parser           | MB/s     | Mfloat/s | Relative speed vs fast_float |
+| ---------------- | -------: | -------: | ---------------------------: |
+| strtod           | 190.94   | 9.10     | 5.5× slower                  |
+| doubleconversion | 225.35   | 10.74    | 4.6× slower                  |
+| netlib           | 271.18   | 12.93    | 3.8× slower                  |
+| abseil           | 430.45   | 20.52    | 2.4× slower                  |
+| **fast_float**   | **1042.38** | **49.68** | —                         |
+
+<Note>
+  These numbers are from benchmark runs on specific test hardware. Actual throughput depends on your CPU, memory bandwidth, compiler version, and input data. Run the benchmarks on your own machine for a fair comparison.
+</Note>
+
+<Tip>
+  Build the bundled benchmarks with `cmake -B build -D FASTFLOAT_BENCHMARKS=ON && cmake --build build` and run `./build/benchmarks/realbenchmark` to get accurate numbers for your environment. See the [benchmarks guide](/performance/benchmarks) for full instructions.
+</Tip>
+
+## Why fast_float is fast
+
+fast_float achieves its throughput through a combination of algorithmic and implementation choices:
+
+**Eisel-Lemire algorithm** — The primary parse path uses the Eisel-Lemire algorithm, which resolves the vast majority of floating-point values using a single 128-bit multiply and a lookup table, avoiding the slow bignum arithmetic needed by traditional parsers.
+
+**Clinger's algorithm as fallback** — For the rare cases the fast path cannot resolve (values that sit exactly between two representable floats), fast_float falls back to Clinger's algorithm. A second paper eliminated even this fallback for most inputs.
+
+**SIMD acceleration** — On x86 the implementation uses SSE2; on ARM it uses NEON. These instructions accelerate digit scanning and mantissa accumulation.
+
+**No allocations, no exceptions** — The library is header-only, allocates no memory, and never throws. This removes overhead that shows up in profilers even when allocations are rare.
+
+## Academic foundation
+
+The algorithms are described in peer-reviewed publications:
+
+- Daniel Lemire, "Number Parsing at a Gigabyte per Second," *Software: Practice and Experience* 51 (8), 2021. ([arXiv:2101.11408](https://arxiv.org/abs/2101.11408))
+- Noble Mushtak, Daniel Lemire, "Fast Number Parsing Without Fallback," *Software: Practice and Experience* 53 (7), 2023. ([arXiv:2212.06644](https://arxiv.org/abs/2212.06644))
+
+## Notable users
+
+fast_float is deployed in production across a wide range of high-throughput systems:
+
+<CardGroup cols={2}>
+  <Card title="GCC 12+" icon="code">
+    The `from_chars` implementation in GCC 12 and later is backed by fast_float.
+  </Card>
+  <Card title="Chromium" icon="globe">
+    Used in Google Chrome, Microsoft Edge, and Opera via the Chromium engine.
+  </Card>
+  <Card title="WebKit / Safari" icon="safari">
+    Integrated into the WebKit engine that powers Apple's Safari browser.
+  </Card>
+  <Card title="Redis and Valkey" icon="database">
+    Used in both the Redis and Valkey key-value stores for number parsing.
+  </Card>
+  <Card title="MySQL" icon="database">
+    Adopted in the MySQL database server.
+  </Card>
+  <Card title="DuckDB" icon="database">
+    Used in DuckDB's analytical query engine.
+  </Card>
+  <Card title="Apache Arrow" icon="bolt">
+    Replaced the previous parser, multiplying number-parsing speed by 2–3×.
+  </Card>
+  <Card title="ClickHouse" icon="chart-bar">
+    Integrated into the ClickHouse columnar database.
+  </Card>
+  <Card title="Boost.JSON" icon="brackets-curly">
+    Used in Boost.JSON for high-performance JSON number parsing.
+  </Card>
+  <Card title="Blender" icon="cube">
+    Adopted in the Blender 3D creation suite.
+  </Card>
+</CardGroup>
+
+The fastfloat algorithm is also part of the [LLVM standard libraries](https://github.com/llvm/llvm-project/commit/87c016078ad72c46505461e4ff8bfa04819fe7ba), extending its reach to every project built on the LLVM toolchain.
+
+## Language ports
+
+Broad adoption across language ecosystems reflects the algorithm's portability and correctness:
+
+| Language | Library                  | Notes                                                                 |
+| -------- | ------------------------ | --------------------------------------------------------------------- |
+| Rust     | `fast-float-rust`        | Direct port of the algorithm                                          |
+| Java     | `FastDoubleParser`       | Used in Jackson, a widely deployed JSON library                       |
+| C#       | `csFastFloat`            | .NET port with idiomatic API                                          |
+| R        | `rcppfastfloat`          | R binding via Rcpp                                                    |
+| C        | `ffc.h`                  | Single-header C port for projects that cannot use C++                 |
+
+Each port independently validates the algorithm's correctness and demonstrates that the performance characteristics are not specific to any single compiler or runtime.

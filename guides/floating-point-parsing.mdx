@@ -1,0 +1,230 @@
+---
+title: "Parse floating-point numbers with fast_float"
+description: "Learn how to parse float, double, and fixed-width types using fast_float::from_chars with format control, error handling, and out-of-range behavior."
+---
+
+`fast_float::from_chars` converts ASCII strings representing decimal values into IEEE 754 binary floating-point numbers with exact rounding, no memory allocation, and no exceptions. It follows the C++17 `std::from_chars` interface while running many times faster than most standard-library implementations.
+
+## Function signatures
+
+```cpp
+#include "fast_float/fast_float.h"
+
+fast_float::from_chars_result
+fast_float::from_chars(char const *first, char const *last, float &value,
+                       fast_float::chars_format fmt = fast_float::chars_format::general);
+
+fast_float::from_chars_result
+fast_float::from_chars(char const *first, char const *last, double &value,
+                       fast_float::chars_format fmt = fast_float::chars_format::general);
+```
+
+The return type `from_chars_result` is a struct with two members:
+
+```cpp
+struct from_chars_result {
+  char const *ptr; // points just past the last character consumed
+  std::errc ec;   // std::errc() on success, error code otherwise
+};
+```
+
+## Basic usage
+
+<Tabs>
+  <Tab title="float">
+    ```cpp
+    #include "fast_float/fast_float.h"
+    #include <iostream>
+    #include <string>
+
+    int main() {
+      std::string input = "3.1416 xyz ";
+      float result;
+      auto answer = fast_float::from_chars(
+          input.data(), input.data() + input.size(), result);
+      if (answer.ec != std::errc()) {
+        std::cerr << "parsing failure\n";
+        return EXIT_FAILURE;
+      }
+      std::cout << "parsed: " << result << std::endl;
+      // answer.ptr points to the space after "3.1416"
+      return EXIT_SUCCESS;
+    }
+    ```
+  </Tab>
+  <Tab title="double">
+    ```cpp
+    #include "fast_float/fast_float.h"
+    #include <iostream>
+    #include <string>
+
+    int main() {
+      std::string input = "3.1416 xyz ";
+      double result;
+      auto answer = fast_float::from_chars(
+          input.data(), input.data() + input.size(), result);
+      if (answer.ec != std::errc()) {
+        std::cerr << "parsing failure\n";
+        return EXIT_FAILURE;
+      }
+      std::cout << "parsed: " << result << std::endl;
+      return EXIT_SUCCESS;
+    }
+    ```
+
+    As an extension to the C++17 API, `from_chars_result` is also convertible to `bool`, matching the C++26 interface:
+
+    ```cpp
+    if (auto answer = fast_float::from_chars(
+            input.data(), input.data() + input.size(), result)) {
+      std::cout << "parsed: " << result << std::endl;
+    }
+    ```
+  </Tab>
+  <Tab title="Fixed-width (C++23)">
+    When `<stdfloat>` is available (C++23), fast_float supports `std::float32_t`,
+    `std::float64_t`, `std::float16_t`, and `std::bfloat16_t`:
+
+    ```cpp
+    #include "fast_float/fast_float.h"
+    #include <stdfloat>
+    #include <string>
+
+    int main() {
+      std::string input = "3.1416";
+
+      std::float32_t f32;
+      fast_float::from_chars(input.data(), input.data() + input.size(), f32);
+
+      std::float64_t f64;
+      fast_float::from_chars(input.data(), input.data() + input.size(), f64);
+
+      std::float16_t f16;
+      fast_float::from_chars(input.data(), input.data() + input.size(), f16);
+
+      std::bfloat16_t bf16;
+      fast_float::from_chars(input.data(), input.data() + input.size(), bf16);
+    }
+    ```
+
+    These types are only available when the compiler provides the corresponding
+    macros (`__STDCPP_FLOAT32_T__`, etc.).
+  </Tab>
+</Tabs>
+
+## Controlling number formats with `chars_format`
+
+The optional `fmt` argument is a bitset of type `fast_float::chars_format` that controls which number notations are accepted.
+
+| Value | Accepts |
+|---|---|
+| `chars_format::general` | Both fixed and scientific notation (default) |
+| `chars_format::fixed` | Fixed-point only (`123.456`) |
+| `chars_format::scientific` | Scientific notation only (`1.23456e2`) |
+| `chars_format::allow_leading_plus` | A leading `+` sign |
+| `chars_format::skip_white_space` | Leading whitespace |
+
+```cpp
+double result;
+// Accept only scientific notation
+auto answer = fast_float::from_chars(
+    input.data(), input.data() + input.size(), result,
+    fast_float::chars_format::scientific);
+```
+
+Flags can be combined with bitwise OR:
+
+```cpp
+auto fmt = fast_float::chars_format::general
+         | fast_float::chars_format::allow_leading_plus;
+```
+
+<Warning>
+`chars_format::no_infnan` suppresses parsing of `inf` and `nan` values. `chars_format::hex` is defined in the enum but hexadecimal floating-point strings are **not** supported by fast_float — the library only parses decimal input. Passing `chars_format::hex` does not enable hex float parsing.
+</Warning>
+
+## Error handling
+
+A successful parse sets `ec` to `std::errc()` and advances `ptr` past the last consumed character. On failure, `ec` holds the error code and `ptr` is left pointing at `first`.
+
+```cpp
+double result;
+auto answer = fast_float::from_chars(
+    input.data(), input.data() + input.size(), result);
+
+if (answer.ec == std::errc()) {
+  // success — result is set, answer.ptr points past the number
+} else if (answer.ec == std::errc::result_out_of_range) {
+  // value was parsed but is out of the representable range
+  // result is set to 0.0 or infinity (see below)
+} else {
+  // no number could be parsed at all
+}
+```
+
+### Parsing delimited sequences
+
+Because `ptr` advances to just after the parsed number, you can parse multiple numbers from a single buffer without copying:
+
+```cpp
+std::string input = "234532.3426362,7869234.9823,324562.645";
+double result;
+auto answer = fast_float::from_chars(
+    input.data(), input.data() + input.size(), result);
+// result == 234532.3426362, answer.ptr points to ','
+
+answer = fast_float::from_chars(
+    answer.ptr + 1, input.data() + input.size(), result);
+// result == 7869234.9823
+
+answer = fast_float::from_chars(
+    answer.ptr + 1, input.data() + input.size(), result);
+// result == 324562.645
+```
+
+## Out-of-range behavior
+
+When a number is parsed successfully but falls outside the representable range, `ec` is set to `std::errc::result_out_of_range` and `ptr` still advances past the number.
+
+<CardGroup cols={2}>
+  <Card title="Too large → infinity">
+    ```cpp
+    double result = -1;
+    std::string str = "3e1000";
+    auto r = fast_float::from_chars(
+        str.data(), str.data() + str.size(), result);
+    // r.ec  == std::errc::result_out_of_range
+    // r.ptr == str.data() + 6
+    // result == std::numeric_limits<double>::infinity()
+    ```
+  </Card>
+  <Card title="Too small → zero">
+    ```cpp
+    double result = -1;
+    std::string str = "3e-1000";
+    auto r = fast_float::from_chars(
+        str.data(), str.data() + str.size(), result);
+    // r.ec  == std::errc::result_out_of_range
+    // r.ptr == str.data() + 7
+    // result == 0
+    ```
+  </Card>
+</CardGroup>
+
+If you need the original value preserved when out-of-range is detected, save it before calling `from_chars`:
+
+```cpp
+double old_result = result;
+auto r = fast_float::from_chars(start, end, result);
+if (r.ec == std::errc::result_out_of_range) {
+  result = old_result;
+}
+```
+
+## Additional guarantees
+
+- The library does not throw exceptions and does not allocate memory.
+- Parsing is locale-independent; the decimal separator is always `.`.
+- Rounding follows the IEEE 754 "round to even" convention.
+- `inf` and `nan` are recognized by default under `chars_format::general`.
+- The rounding mode must be set to nearest (`FE_TONEAREST`).

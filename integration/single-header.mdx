@@ -1,0 +1,87 @@
+---
+title: "Use fast_float as a single header file"
+description: "Download or generate a single self-contained fast_float.h header to drop into any C++ project without a build system or package manager."
+---
+
+fast_float ships as a collection of header files under `include/fast_float/`, but a single self-contained header is also available for projects that prefer a drop-in approach. You can either download the pre-generated file from a release or produce it yourself using the `script/amalgamate.py` script included in the repository.
+
+## Download and use the single header
+
+<Steps>
+  <Step title="Download fast_float.h">
+    Fetch the pre-built single header for v8.2.5 directly from the GitHub release:
+
+    ```bash
+    curl -Lo fast_float.h \
+      https://github.com/fastfloat/fast_float/releases/download/v8.2.5/fast_float.h
+    ```
+
+    Place the file anywhere your compiler can find it — for example, alongside your own source files or in a `vendor/` directory.
+  </Step>
+
+  <Step title="Include the header">
+    Add a single include directive to every translation unit that needs it:
+
+    ```cpp
+    #include "fast_float.h"
+    ```
+
+    No additional include paths, linker flags, or build-system configuration is required.
+  </Step>
+
+  <Step title="Use the library">
+    The full `fast_float` API is available immediately:
+
+    ```cpp
+    #include "fast_float.h"
+    #include <iostream>
+    #include <string>
+
+    int main() {
+      std::string input = "3.1416 xyz ";
+      double result;
+      auto answer = fast_float::from_chars(
+        input.data(), input.data() + input.size(), result);
+      if (answer.ec != std::errc()) {
+        std::cerr << "parsing failure\n";
+        return EXIT_FAILURE;
+      }
+      std::cout << "parsed the number " << result << std::endl;
+      return EXIT_SUCCESS;
+    }
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  The single-header file is auto-generated from the multi-file source using `script/amalgamate.py`. It is produced by concatenating all internal headers into one file and removing the internal `#include` directives that connect them. The generated file is functionally identical to using the full source tree.
+</Note>
+
+## Generate a custom single header
+
+If you need a different license header or want to build from a local checkout, run `amalgamate.py` from the root of the fast_float repository:
+
+```bash
+# Default: triple license (Apache 2.0, MIT, Boost), output to stdout
+python script/amalgamate.py
+
+# Write to a file
+python script/amalgamate.py --output fast_float.h
+
+# Choose a specific license
+python script/amalgamate.py --license MIT --output fast_float.h
+```
+
+The `--license` flag accepts `TRIPLE` (default), `DUAL`, `MIT`, `APACHE`, or `BOOST`.
+
+The script reads the following source headers in order and merges them into a single output file, stripping internal `#include "..."` directives:
+
+- `constexpr_feature_detect.h`
+- `float_common.h`
+- `fast_float.h`
+- `ascii_number.h`
+- `fast_table.h`
+- `decimal_to_binary.h`
+- `bigint.h`
+- `digit_comparison.h`
+- `parse_number.h`

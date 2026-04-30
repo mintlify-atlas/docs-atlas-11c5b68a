@@ -1,0 +1,142 @@
+---
+title: "Parse numbers from Unicode character sequences"
+description: "fast_float supports parsing directly from UTF-16 and UTF-32 character sequences in addition to ASCII/UTF-8 using the same from_chars API."
+---
+
+`fast_float::from_chars` is a function template parameterized on the character type `UC`. By default `UC` is `char` (ASCII/UTF-8), but you can pass `char16_t` or `char32_t` pointers directly and the library will handle the encoding without any conversion step.
+
+## Template parameter `UC`
+
+The full signature is:
+
+```cpp
+template <typename T, typename UC = char>
+fast_float::from_chars_result_t<UC>
+fast_float::from_chars(UC const *first, UC const *last, T &value,
+                       fast_float::chars_format fmt = fast_float::chars_format::general);
+```
+
+The return type changes with `UC`:
+
+```cpp
+template <typename UC>
+struct from_chars_result_t {
+  UC const *ptr; // pointer into the same character sequence that was passed in
+  std::errc ec;
+};
+```
+
+`ptr` has type `UC const *`, so it points back into the original wide-character buffer — no conversion is needed to advance to the next token.
+
+## Parsing by character encoding
+
+<Tabs>
+  <Tab title="UTF-8 / char (default)">
+    The default character type. Works with `std::string`, `char` arrays, and
+    `std::string_view`:
+
+    ```cpp
+    #include "fast_float/fast_float.h"
+    #include <iostream>
+    #include <string>
+
+    int main() {
+      std::string input = "3.1416 xyz ";
+      double result;
+      auto answer = fast_float::from_chars(
+          input.data(), input.data() + input.size(), result);
+      if (answer.ec != std::errc()) {
+        std::cerr << "parsing failure\n";
+        return EXIT_FAILURE;
+      }
+      std::cout << "parsed the number " << result << std::endl;
+      return EXIT_SUCCESS;
+    }
+    ```
+  </Tab>
+  <Tab title="UTF-16 (char16_t)">
+    Pass a `char16_t` pointer pair and the library infers `UC = char16_t`.
+    The returned `ptr` is also a `char16_t const *`:
+
+    ```cpp
+    #include "fast_float/fast_float.h"
+    #include <iostream>
+
+    int main() {
+      std::u16string input = u"3.1416 xyz ";
+      double result;
+      auto answer = fast_float::from_chars(
+          input.data(), input.data() + input.size(), result);
+      if (answer.ec != std::errc()) {
+        std::cerr << "parsing failure\n";
+        return EXIT_FAILURE;
+      }
+      std::cout << "parsed the number " << result << std::endl;
+      // answer.ptr is char16_t const *, pointing past "3.1416"
+      return EXIT_SUCCESS;
+    }
+    ```
+  </Tab>
+  <Tab title="UTF-32 (char32_t)">
+    The same API works with `char32_t` and `std::u32string`:
+
+    ```cpp
+    #include "fast_float/fast_float.h"
+    #include <iostream>
+
+    int main() {
+      std::u32string input = U"3.1416 xyz ";
+      double result;
+      auto answer = fast_float::from_chars(
+          input.data(), input.data() + input.size(), result);
+      if (answer.ec != std::errc()) {
+        std::cerr << "parsing failure\n";
+        return EXIT_FAILURE;
+      }
+      std::cout << "parsed the number " << result << std::endl;
+      // answer.ptr is char32_t const *, pointing past "3.1416"
+      return EXIT_SUCCESS;
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## `from_chars_result_t<UC>` and pointer arithmetic
+
+Because the result's `ptr` member matches the input character type, you can use it directly for sequential parsing without casting:
+
+```cpp
+std::u16string input = u"1.5,2.5,3.5";
+double result;
+char16_t const *pos = input.data();
+char16_t const *end = input.data() + input.size();
+
+while (pos < end) {
+  auto answer = fast_float::from_chars(pos, end, result);
+  if (answer.ec != std::errc()) break;
+  std::cout << result << "\n";
+  pos = answer.ptr;
+  if (pos < end && *pos == u',') ++pos;
+}
+```
+
+<Note>
+`wchar_t` is also a supported character type. On Windows `wchar_t` is 16-bit
+(equivalent to UTF-16); on Linux and macOS it is 32-bit (equivalent to UTF-32).
+Use `std::wstring` and `L""` literals when targeting `wchar_t`.
+</Note>
+
+## Format flags with Unicode inputs
+
+All `chars_format` options work identically regardless of the character type, including `allow_leading_plus`, `skip_white_space`, and the format variants (`json`, `fortran`, etc.):
+
+```cpp
+std::u16string input = u" +3.14";
+double result;
+auto fmt = fast_float::chars_format::general
+         | fast_float::chars_format::allow_leading_plus
+         | fast_float::chars_format::skip_white_space;
+auto answer = fast_float::from_chars(
+    input.data(), input.data() + input.size(), result, fmt);
+// result == 3.14
+```

@@ -1,0 +1,225 @@
+---
+title: "from_chars_advanced — parse with custom options"
+description: "fast_float::from_chars_advanced accepts a parse_options struct to customize format, decimal separator, and integer base for specialized parsing needs."
+---
+
+`fast_float::from_chars_advanced` is the customization-point companion to [`from_chars`](/api/from-chars). It accepts a `parse_options_t<UC>` struct that controls which number formats are accepted, which character acts as the decimal separator, and which integer base is used. Use it when you need locale-sensitive separators, JSON-strict parsing, Fortran-style exponent letters, or any other deviation from the default `general` format.
+
+## Signature
+
+```cpp
+template <typename T, typename UC = char>
+FASTFLOAT_CONSTEXPR20 from_chars_result_t<UC>
+from_chars_advanced(UC const *first, UC const *last, T &value,
+                    parse_options_t<UC> options) noexcept;
+```
+
+## Template parameters
+
+<ParamField path="T" type="typename" required>
+  Target type. May be any floating-point type supported by `is_supported_float_type<T>` (`float`, `double`, `std::float16_t`, `std::bfloat16_t`, `std::float32_t`, `std::float64_t`) or any integer type supported by `is_supported_integer_type<T>`.
+</ParamField>
+
+<ParamField path="UC" type="typename" default="char">
+  Character type. Supported values are `char`, `wchar_t`, `char16_t`, `char32_t`, and (when available) `char8_t`. Must match the character type of `first`/`last` and the `decimal_point` field in `options`.
+</ParamField>
+
+## Parameters
+
+<ParamField path="first" type="UC const *" required>
+  Pointer to the beginning of the input sequence.
+</ParamField>
+
+<ParamField path="last" type="UC const *" required>
+  One-past-the-end pointer. The parsed range is `[first, last)`.
+</ParamField>
+
+<ParamField path="value" type="T &" required>
+  Output reference that receives the parsed value on success.
+</ParamField>
+
+<ParamField path="options" type="parse_options_t<UC>" required>
+  A `parse_options_t<UC>` struct (or its `parse_options` alias when `UC = char`) that bundles all parsing options. See the fields below.
+</ParamField>
+
+## `parse_options_t<UC>` fields
+
+`parse_options_t<UC>` is constructed with `chars_format fmt`, `UC dot`, and `int base`:
+
+```cpp
+template <typename UC> struct parse_options_t {
+    constexpr explicit parse_options_t(
+        chars_format fmt = chars_format::general,
+        UC dot = UC('.'),
+        int b = 10)
+        : format(fmt), decimal_point(dot), base(b) {}
+
+    chars_format format;
+    UC decimal_point;
+    int base;
+};
+
+using parse_options = parse_options_t<char>;
+```
+
+<ResponseField name="format" type="chars_format" default="chars_format::general">
+  Bitmask that controls which number formats are accepted. Common values:
+
+  | Value | Meaning |
+  |---|---|
+  | `general` | Fixed-point and scientific notation (default) |
+  | `scientific` | Scientific notation only (`1.5e3`) |
+  | `fixed` | Fixed-point only (`1500.0`) |
+  | `hex` | Defined in the enum but not supported for floating-point input |
+  | `json` | Strict RFC 8259 — no `inf`, no `nan`, no leading `+` |
+  | `json_or_infnan` | JSON rules but `inf` and `nan` are accepted |
+  | `fortran` | `d`/`D` accepted as exponent separator |
+  | `no_infnan` | Disable `inf`/`nan` recognition |
+
+  See [`chars_format`](/api/types#chars-format) for the complete list and bit values.
+</ResponseField>
+
+<ResponseField name="decimal_point" type="UC" default="'.'">
+  The character that separates the integer and fractional parts of a number. The default is `'.'`. Set to `','` for locales that use a comma as the decimal separator.
+</ResponseField>
+
+<ResponseField name="base" type="int" default="10">
+  Numeric base for integer parsing. Valid range is 2–36. Ignored when parsing floating-point types.
+</ResponseField>
+
+## Return value
+
+Returns `from_chars_result_t<UC>` with the same semantics as [`from_chars`](/api/from-chars#return-value): `ptr` points past the consumed characters on success, and `ec` holds `std::errc()` on success, `std::errc::invalid_argument` when no match was found, or `std::errc::result_out_of_range` when the value overflows/underflows.
+
+## Guarantees
+
+- **`noexcept`** — never throws.
+- **No allocation** — no dynamic memory use.
+- **`FASTFLOAT_CONSTEXPR20`** — available at compile-time in C++20.
+
+## Examples
+
+### Custom comma decimal separator
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <iostream>
+#include <string>
+
+int main() {
+    std::string input = "3,1416 xyz";
+    double result;
+    fast_float::parse_options options{fast_float::chars_format::general, ','};
+    auto answer = fast_float::from_chars_advanced(
+        input.data(), input.data() + input.size(), result, options);
+
+    if (answer.ec != std::errc() || result != 3.1416) {
+        std::cerr << "parsing failure\n";
+        return EXIT_FAILURE;
+    }
+    std::cout << "parsed: " << result << '\n'; // 3.1416
+    return EXIT_SUCCESS;
+}
+```
+
+### JSON format (RFC 8259)
+
+`chars_format::json` enforces strict JSON number syntax: no leading `+`, no `inf`, no `nan`, and the integer part must not have a leading zero (except for `0` itself).
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <iostream>
+#include <string>
+
+int main() {
+    double result;
+    fast_float::parse_options options{fast_float::chars_format::json};
+
+    // "+.1" is not valid JSON — leading + is forbidden
+    std::string bad = "+.1";
+    auto answer = fast_float::from_chars_advanced(
+        bad.data(), bad.data() + bad.size(), result, options);
+    // answer.ec == std::errc::invalid_argument
+
+    // "inf" is not valid JSON
+    std::string inf_str = "inf";
+    answer = fast_float::from_chars_advanced(
+        inf_str.data(), inf_str.data() + inf_str.size(), result, options);
+    // answer.ec == std::errc::invalid_argument
+
+    std::cout << "Both rejected as expected\n";
+    return EXIT_SUCCESS;
+}
+```
+
+### JSON format with inf/nan extension (`json_or_infnan`)
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <cmath>
+#include <iostream>
+
+int main() {
+    double result;
+    fast_float::parse_options options{fast_float::chars_format::json_or_infnan};
+
+    std::string input = "inf";
+    auto answer = fast_float::from_chars_advanced(
+        input.data(), input.data() + input.size(), result, options);
+
+    if (answer.ec != std::errc() || !std::isinf(result)) {
+        std::cerr << "expected infinity\n";
+        return EXIT_FAILURE;
+    }
+    std::cout << "parsed infinity\n";
+    return EXIT_SUCCESS;
+}
+```
+
+### Fortran-style exponent (`d`/`D` separator)
+
+Fortran uses `d` or `D` instead of `e`/`E` for the exponent. `chars_format::fortran` accepts both conventions.
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <iostream>
+#include <string>
+
+int main() {
+    std::string input = "1d+4"; // Fortran for 1e4 = 10000
+    double result;
+    fast_float::parse_options options{fast_float::chars_format::fortran};
+    auto answer = fast_float::from_chars_advanced(
+        input.data(), input.data() + input.size(), result, options);
+
+    if (answer.ec != std::errc() || result != 10000.0) {
+        std::cerr << "parsing failure\n";
+        return EXIT_FAILURE;
+    }
+    std::cout << "parsed: " << result << '\n'; // 10000
+    return EXIT_SUCCESS;
+}
+```
+
+### Wide character input with custom options
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+    std::wstring input = L"3,14";
+    double result;
+    fast_float::parse_options_t<wchar_t> options{
+        fast_float::chars_format::general, L','};
+    auto answer = fast_float::from_chars_advanced(
+        input.data(), input.data() + input.size(), result, options);
+
+    if (answer.ec != std::errc()) {
+        std::cerr << "parsing failure\n";
+        return EXIT_FAILURE;
+    }
+    std::cout << "parsed: " << result << '\n'; // 3.14
+    return EXIT_SUCCESS;
+}
+```

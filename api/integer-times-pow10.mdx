@@ -1,0 +1,151 @@
+---
+title: "integer_times_pow10 — exact integer × 10^Q"
+description: "fast_float::integer_times_pow10 multiplies an integer by a power of 10 and returns the nearest floating-point value using round-to-even."
+---
+
+`fast_float::integer_times_pow10` multiplies an integer mantissa by a power of 10 and converts the result to a floating-point value with exact IEEE 754 round-to-nearest-even rounding. This is the same arithmetic used internally by `from_chars` when parsing decimal strings of the form `WeQ`.
+
+## Signatures
+
+```cpp
+// Non-template overloads — always return double
+FASTFLOAT_CONSTEXPR20 inline double
+integer_times_pow10(uint64_t mantissa, int decimal_exponent) noexcept;
+
+FASTFLOAT_CONSTEXPR20 inline double
+integer_times_pow10(int64_t mantissa, int decimal_exponent) noexcept;
+
+// Template overloads — return any supported floating-point type T
+template <typename T>
+FASTFLOAT_CONSTEXPR20
+    typename std::enable_if<is_supported_float_type<T>::value, T>::type
+    integer_times_pow10(uint64_t mantissa, int decimal_exponent) noexcept;
+
+template <typename T>
+FASTFLOAT_CONSTEXPR20
+    typename std::enable_if<is_supported_float_type<T>::value, T>::type
+    integer_times_pow10(int64_t mantissa, int decimal_exponent) noexcept;
+```
+
+## Parameters
+
+<ParamField path="mantissa" type="uint64_t or int64_t" required>
+  The integer factor. Provide a `uint64_t` for non-negative values, or `int64_t` to support negative mantissas. The template overloads accept both types.
+</ParamField>
+
+<ParamField path="decimal_exponent" type="int" required>
+  The power of 10 to multiply by. The computed value is `mantissa × 10^decimal_exponent`. May be negative, zero, or positive.
+</ParamField>
+
+## Return value
+
+Returns `mantissa × 10^decimal_exponent` rounded to the nearest representable value of the return type using round-to-nearest-even (IEEE 754 default):
+
+- **Non-template overloads** always return `double`.
+- **Template overloads** return `T`, which may be `float`, `double`, `std::float16_t`, `std::bfloat16_t`, `std::float32_t`, or `std::float64_t`.
+
+## Overflow and underflow
+
+<Note>
+  Unlike `from_chars`, `integer_times_pow10` does **not** set an error code. Out-of-range results are silently clamped:
+
+  - **Overflow** (result magnitude too large) — returns `+infinity` or `-infinity`.
+  - **Underflow** (result magnitude too small to represent) — returns `+0` or `-0`.
+
+  If you need out-of-range detection, use `from_chars` on the equivalent string `"WeQ"` and inspect `ec`.
+</Note>
+
+## Guarantees
+
+- **`noexcept`** — never throws.
+- **No allocation** — no dynamic memory use.
+- **`FASTFLOAT_CONSTEXPR20`** — available in `constexpr`/`consteval` contexts in C++20.
+- **Exact rounding** — the result equals what `from_chars` would produce for the string `"WeQ"` (assuming no out-of-range condition triggers the distinction).
+
+## Examples
+
+### Basic `double` result
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+    const uint64_t W = 12345678901234567;
+    const int Q = 23;
+    const double result = fast_float::integer_times_pow10(W, Q);
+
+    std::cout.precision(17);
+    std::cout << W << " * 10^" << Q << " = " << result << '\n';
+    // Output: 12345678901234567 * 10^23 = 1.2345678901234567e+39
+    return EXIT_SUCCESS;
+}
+```
+
+### `float` specialization
+
+Pass the target type as an explicit template argument to receive a `float` result:
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+    const uint64_t W = 12345678;
+    const int Q = 23;
+    const float result = fast_float::integer_times_pow10<float>(W, Q);
+
+    std::cout.precision(9);
+    std::cout << "float: " << W << " * 10^" << Q << " = " << result << '\n';
+    // Output: float: 12345678 * 10^23 = 1.23456782e+30
+    return EXIT_SUCCESS;
+}
+```
+
+### Negative exponent
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+    // 1 * 10^-3 = 0.001
+    double result = fast_float::integer_times_pow10(uint64_t{1}, -3);
+    std::cout << result << '\n'; // 0.001
+    return EXIT_SUCCESS;
+}
+```
+
+### Overflow and underflow behavior
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <cmath>
+#include <iostream>
+
+int main() {
+    // Overflow: returns infinity, no error reported
+    double big = fast_float::integer_times_pow10(uint64_t{1}, 10000);
+    std::cout << std::isinf(big) << '\n'; // 1 (true)
+
+    // Underflow: returns 0, no error reported
+    double tiny = fast_float::integer_times_pow10(uint64_t{1}, -10000);
+    std::cout << (tiny == 0.0) << '\n'; // 1 (true)
+
+    return EXIT_SUCCESS;
+}
+```
+
+### Signed mantissa
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+    // -42 * 10^2 = -4200.0
+    double result = fast_float::integer_times_pow10(int64_t{-42}, 2);
+    std::cout << result << '\n'; // -4200
+    return EXIT_SUCCESS;
+}
+```

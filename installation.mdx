@@ -1,0 +1,175 @@
+---
+title: "Install fast_float in your C++ project"
+description: "Add fast_float to your project using CMake FetchContent, add_subdirectory, CPM.cmake, single-header download, Conan, Homebrew, or xmake."
+---
+
+fast_float is a header-only library. There is nothing to compile — you only need the `include/` directory on your compiler's include path. The sections below cover every supported way to add it to a project.
+
+<Warning>
+fast_float requires a C++11 or later compiler. CMake 3.14 or later is required for the FetchContent method. CMake 3.11 is the minimum for `add_subdirectory`.
+</Warning>
+
+## Installation methods
+
+<Tabs>
+  <Tab title="CMake FetchContent">
+    Use `FetchContent` to have CMake download and configure fast_float automatically at configure time. This is the recommended approach for projects that already use CMake 3.14+.
+
+    <Steps>
+      <Step title="Enable FetchContent in your CMakeLists.txt">
+        Add the following near the top of your `CMakeLists.txt`, after the `project()` call:
+
+        ```cmake
+        include(FetchContent)
+        ```
+      </Step>
+      <Step title="Declare the fast_float dependency">
+        ```cmake
+        FetchContent_Declare(
+          fast_float
+          GIT_REPOSITORY https://github.com/fastfloat/fast_float.git
+          GIT_TAG tags/v8.2.5
+          GIT_SHALLOW TRUE)
+
+        FetchContent_MakeAvailable(fast_float)
+        ```
+
+        Change `GIT_TAG` to the version you want. The current stable release is `v8.2.5`.
+      </Step>
+      <Step title="Link your target against fast_float">
+        ```cmake
+        target_link_libraries(myprogram PUBLIC fast_float)
+        ```
+
+        fast_float is an `INTERFACE` library, so linking it only adds the include directory — no object files are compiled.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="CMake add_subdirectory">
+    If you prefer to vendor fast_float by copying the repository into your project tree, use `add_subdirectory`:
+
+    ```cmake
+    add_subdirectory(fast_float)
+    target_link_libraries(myprogram PUBLIC fast_float)
+    ```
+
+    Place the fast_float source tree at the path you pass to `add_subdirectory` (for example, a `third_party/fast_float/` folder). The CMake target is also available under the alias `FastFloat::fast_float`.
+  </Tab>
+
+  <Tab title="CPM.cmake">
+    [CPM.cmake](https://github.com/cpm-cmake/CPM.cmake) is a lightweight CMake package manager built on top of `FetchContent`. Add fast_float with a single call:
+
+    ```cmake
+    CPMAddPackage(
+      NAME fast_float
+      GITHUB_REPOSITORY "fastfloat/fast_float"
+      GIT_TAG v8.2.5)
+
+    target_link_libraries(myprogram PUBLIC fast_float)
+    ```
+  </Tab>
+
+  <Tab title="Single header">
+    For projects that cannot use CMake or a package manager, download a pre-built single-header amalgamation:
+
+    ```bash
+    curl -L -o fast_float.h \
+      https://github.com/fastfloat/fast_float/releases/download/v8.2.5/fast_float.h
+    ```
+
+    Copy `fast_float.h` anywhere on your include path, then use:
+
+    ```cpp
+    #include "fast_float.h"
+    ```
+
+    The single-header file is generated from the multi-file source using `script/amalgamate.py` in the repository.
+  </Tab>
+
+  <Tab title="Conan">
+    fast_float is available on the [Conan Center Index](https://conan.io/center/recipes/fast_float).
+
+    Add it to your `conanfile.txt`:
+
+    ```ini
+    [requires]
+    fast_float/8.2.5
+
+    [generators]
+    CMakeDeps
+    CMakeToolchain
+    ```
+
+    Or in a `conanfile.py`:
+
+    ```python
+    def requirements(self):
+        self.requires("fast_float/8.2.5")
+    ```
+
+    Then run:
+
+    ```bash
+    conan install . --build=missing
+    ```
+  </Tab>
+
+  <Tab title="Homebrew">
+    On macOS (or Linux with Homebrew), install the headers system-wide:
+
+    ```bash
+    brew install fast-float
+    ```
+
+    The headers are placed in Homebrew's include directory, which most build tools find automatically. If not, pass `-I$(brew --prefix fast-float)/include` to your compiler.
+  </Tab>
+
+  <Tab title="xmake">
+    fast_float is available in the [xmake repository](https://xmake.io):
+
+    ```lua
+    add_requires("fast_float")
+
+    target("myprogram")
+        set_kind("binary")
+        add_files("src/*.cpp")
+        add_packages("fast_float")
+    ```
+
+    Run `xmake` to fetch and build.
+  </Tab>
+</Tabs>
+
+## Verifying the installation
+
+After installation, the following minimal program should compile and run without errors:
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <cassert>
+#include <string>
+
+int main() {
+  std::string input = "3.14";
+  double result;
+  auto answer = fast_float::from_chars(input.data(), input.data() + input.size(), result);
+  assert(answer.ec == std::errc());
+  return 0;
+}
+```
+
+<Tip>
+If you installed via CMake, the `FastFloat::fast_float` alias target is also available alongside the `fast_float` target. Both point to the same interface library.
+</Tip>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Write your first number-parsing program using fast_float.
+  </Card>
+  <Card title="API reference" icon="code" href="/api/from-chars">
+    See the full `from_chars` signature and all available options.
+  </Card>
+</CardGroup>

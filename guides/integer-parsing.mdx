@@ -1,0 +1,156 @@
+---
+title: "Parse integers with fast_float"
+description: "fast_float::from_chars parses all standard integer types including int, uint64_t, and bool in any base from 2 to 36 with no allocations."
+---
+
+`fast_float::from_chars` supports integer types using the same pointer-range interface as the floating-point overloads. It accepts any base from 2 to 36, performs no memory allocation, and never throws.
+
+## Supported types
+
+The following integer types are supported:
+
+- `char`, `short`, `int`, `long`, `long long`
+- `unsigned char`, `unsigned short`, `unsigned int`, `unsigned long`, `unsigned long long`
+- `int8_t`, `int16_t`, `int32_t`, `int64_t`
+- `uint8_t`, `uint16_t`, `uint32_t`, `uint64_t`
+- `bool` (parses `0` or `1`)
+
+## Function signature
+
+```cpp
+#include "fast_float/fast_float.h"
+
+fast_float::from_chars_result
+fast_float::from_chars(char const *first, char const *last, T &value,
+                       int base = 10);
+```
+
+The `base` parameter accepts any integer from 2 to 36. The default is decimal (base 10).
+
+## Parsing in different bases
+
+The following example parses the same value three times — once in decimal, once in binary, and once in hexadecimal — and prints it each time:
+
+<Tabs>
+  <Tab title="Decimal (base 10)">
+    ```cpp
+    #include "fast_float/fast_float.h"
+    #include <iostream>
+
+    int main() {
+      uint64_t i;
+      std::string str = "22250738585072012";
+      auto answer = fast_float::from_chars(
+          str.data(), str.data() + str.size(), i);
+      if (answer.ec != std::errc()) {
+        std::cerr << "parsing failure\n";
+        return EXIT_FAILURE;
+      }
+      std::cout << "parsed the number " << i << std::endl;
+      // prints: 22250738585072012
+      return EXIT_SUCCESS;
+    }
+    ```
+  </Tab>
+  <Tab title="Binary (base 2)">
+    ```cpp
+    #include "fast_float/fast_float.h"
+    #include <iostream>
+
+    int main() {
+      uint64_t i;
+      std::string binstr =
+          "1001111000011001110110111001001010110100111000110001100";
+      auto answer = fast_float::from_chars(
+          binstr.data(), binstr.data() + binstr.size(), i, 2);
+      if (answer.ec != std::errc()) {
+        std::cerr << "parsing failure\n";
+        return EXIT_FAILURE;
+      }
+      std::cout << "parsed the number " << i << std::endl;
+      // prints: 22250738585072012
+      return EXIT_SUCCESS;
+    }
+    ```
+  </Tab>
+  <Tab title="Hexadecimal (base 16)">
+    ```cpp
+    #include "fast_float/fast_float.h"
+    #include <iostream>
+
+    int main() {
+      uint64_t i;
+      std::string hexstr = "4f0cedc95a718c";
+      auto answer = fast_float::from_chars(
+          hexstr.data(), hexstr.data() + hexstr.size(), i, 16);
+      if (answer.ec != std::errc()) {
+        std::cerr << "parsing failure\n";
+        return EXIT_FAILURE;
+      }
+      std::cout << "parsed the number " << i << std::endl;
+      // prints: 22250738585072012
+      return EXIT_SUCCESS;
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Complete multi-base example
+
+The following program demonstrates all three bases in sequence and prints `22250738585072012` three times:
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <iostream>
+
+int main() {
+  uint64_t i;
+
+  // decimal
+  std::string str = "22250738585072012";
+  auto answer = fast_float::from_chars(str.data(), str.data() + str.size(), i);
+  if (answer.ec != std::errc()) { std::cerr << "parsing failure\n"; return EXIT_FAILURE; }
+  std::cout << "parsed the number " << i << std::endl;
+
+  // binary
+  std::string binstr = "1001111000011001110110111001001010110100111000110001100";
+  answer = fast_float::from_chars(binstr.data(), binstr.data() + binstr.size(), i, 2);
+  if (answer.ec != std::errc()) { std::cerr << "parsing failure\n"; return EXIT_FAILURE; }
+  std::cout << "parsed the number " << i << std::endl;
+
+  // hexadecimal
+  std::string hexstr = "4f0cedc95a718c";
+  answer = fast_float::from_chars(hexstr.data(), hexstr.data() + hexstr.size(), i, 16);
+  if (answer.ec != std::errc()) { std::cerr << "parsing failure\n"; return EXIT_FAILURE; }
+  std::cout << "parsed the number " << i << std::endl;
+
+  return EXIT_SUCCESS;
+}
+```
+
+## Error handling
+
+The return type is `fast_float::from_chars_result` (the same struct used for floating-point parsing):
+
+```cpp
+struct from_chars_result {
+  char const *ptr; // points just past the last character consumed
+  std::errc ec;   // std::errc() on success
+};
+```
+
+On overflow, `ec` is set to `std::errc::result_out_of_range`. On an invalid input sequence, `ec` is set to `std::errc::invalid_argument` and `ptr` remains at `first`.
+
+```cpp
+int value;
+std::string overflow = "99999999999";
+auto answer = fast_float::from_chars(
+    overflow.data(), overflow.data() + overflow.size(), value);
+if (answer.ec == std::errc::result_out_of_range) {
+  std::cerr << "integer overflow\n";
+}
+```
+
+<Note>
+For `bool`, only the strings `"0"` and `"1"` are accepted. Any other input results in a parse error.
+</Note>

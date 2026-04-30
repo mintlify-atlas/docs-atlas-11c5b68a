@@ -1,133 +1,78 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
-icon: 'star'
+title: "fast_float: Number Parsing at Gigabyte-per-Second Speed"
+description: "fast_float is a header-only C++ library that parses floating-point and integer numbers 4x–10x faster than strtod, with exact IEEE 754 rounding."
 ---
 
-## Setting up
+fast_float is a header-only C++ library providing high-performance implementations of the C++17 `std::from_chars` functions for `float`, `double`, fixed-width floating-point types, and all standard integer types. It delivers exact IEEE 754 rounding, zero memory allocations, and no exceptions — parsing random floating-point numbers at up to 1 GB/s.
 
-Get your documentation site up and running in minutes.
+Used in production by GCC 12, Chromium, WebKit/Safari, Redis, MySQL, DuckDB, Apache Arrow, and ClickHouse.
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Add fast_float to your project via CMake, Conan, Homebrew, or as a single header file.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Parse your first floating-point number in under five minutes.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="API Reference" icon="code" href="/api/from-chars">
+    Explore the full public API: from_chars, from_chars_advanced, and integer_times_pow10.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Performance" icon="gauge-high" href="/performance/benchmarks">
+    See benchmark results and how fast_float compares to strtod and other libraries.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Why fast_float?
 
-Everything you need to create world-class documentation.
+fast_float provides the fastest correct floating-point parser available for C++. It is a drop-in replacement for `std::from_chars` that works on C++11 and later, with optional `constexpr` support in C++20.
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
+<CardGroup cols={2}>
+  <Card title="Floating-point parsing" icon="hashtag" href="/guides/floating-point-parsing">
+    Parse float and double with all format options.
   </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
+  <Card title="Integer parsing" icon="binary" href="/guides/integer-parsing">
+    Parse integers in any base from 2 to 36.
   </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
+  <Card title="Advanced options" icon="sliders" href="/guides/advanced-options">
+    Custom decimal separators, JSON mode, Fortran format.
   </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
+  <Card title="Unicode inputs" icon="globe" href="/guides/unicode-inputs">
+    Parse from UTF-8, UTF-16, and UTF-32 character sequences.
   </Card>
-</Columns>
+</CardGroup>
 
-## Make your content agent ready
+## How it works
 
-Make your docs work for humans and AI agents alike.
+<Steps>
+  <Step title="Include the header">
+    Copy the single header or add the repository as a CMake dependency. No build step required.
+  </Step>
+  <Step title="Call from_chars">
+    Pass a character range and a reference to your target variable. The function returns a result struct with a pointer and an error code.
+  </Step>
+  <Step title="Check the result">
+    Verify `answer.ec == std::errc()` (or use the C++26-style `bool` conversion) and read the parsed value.
+  </Step>
+</Steps>
 
-<Columns cols={2}>
-  <Card
-    title="Prompt component"
-    icon="robot"
-    href="/agent-ready/prompt"
-  >
-    Embed shareable AI prompts readers can copy or open in Cursor.
-  </Card>
-  <Card
-    title="Visibility"
-    icon="eye"
-    href="/agent-ready/visibility"
-  >
-    Show different content to humans and agents reading your docs.
-  </Card>
-  <Card
-    title="Contextual menu"
-    icon="bolt"
-    href="/agent-ready/contextual"
-  >
-    Give readers one-click access to Claude, ChatGPT, Cursor, and more.
-  </Card>
-  <Card
-    title="AI coding tools"
-    icon="wand-magic-sparkles"
-    href="/ai-tools/claude-code"
-  >
-    Set up Claude Code, Cursor, or Windsurf with Mintlify's skill.
-  </Card>
-</Columns>
+```cpp fast_float_example.cpp
+#include "fast_float/fast_float.h"
+#include <iostream>
+#include <string>
 
-## Need inspiration?
+int main() {
+  std::string input = "3.1416 xyz";
+  double result;
+  auto answer = fast_float::from_chars(input.data(), input.data() + input.size(), result);
+  if (answer.ec != std::errc()) {
+    std::cerr << "parsing failure\n";
+    return EXIT_FAILURE;
+  }
+  std::cout << "parsed: " << result << "\n"; // parsed: 3.1416
+  return EXIT_SUCCESS;
+}
+```
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<Note>
+  fast_float requires C++11 or later. Constexpr evaluation is available in C++20. Fixed-width floating-point types (`std::float16_t`, `std::bfloat16_t`, etc.) require C++23.
+</Note>
